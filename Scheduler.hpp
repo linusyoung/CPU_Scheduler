@@ -69,7 +69,6 @@ private:
 		@param	int index - index of process
 	*/	
 	void set_output(int index){
-		output[index].running+=rr;
 		if (output[index].first_run){
 			output[index].ready=runtime;
 			output[index].first_run=!output[index].first_run;
@@ -280,6 +279,7 @@ void Scheduler::print_result(){
 void Scheduler::run_process(){
 	Process_prop running;
 	int index;
+	int run_count=0;
 	string id;
 	while(total_burst>0){
 		if(sub_hpq.size()!=0){
@@ -292,6 +292,7 @@ void Scheduler::run_process(){
 			set_output(index);
 			sub_hpq.pop();
 			running.required_time-=rr;
+			output[index].running+=rr;
 			if (running.required_time>0){
 				if (output[index].running % 20!=0){
 					sub_hpq.push(running);
@@ -309,13 +310,16 @@ void Scheduler::run_process(){
 		}
 		else{
 			running=lpq_q2.front();
+			bool empty=false;
+			run_count=0;
 			id = running.name;
 			index = id[1]-'0';
 			set_output(index);
 			lpq_q2.pop();
-			running.required_time-=rr;
-			if (running.required_time>0){
+			while(running.required_time>0 && !empty){
+				running.required_time-=rr;
 				running.age_count++;
+				run_count++;
 				if (running.age_count==10){
 					running.age++;
 				}		
@@ -325,19 +329,29 @@ void Scheduler::run_process(){
 				}
 				if (running.priority>=PRIORITY){
 					sub_hpq.push(running);
-				}
-				else{
-					lpq_q2.push(running);
+					empty=true;
 				}
 			}
+			output[index].running+=run_count*rr;
 		}
 		//runtime increases rr time and total burst time decreases
-		runtime+=rr;
+		if(run_count){
+			runtime+=run_count*rr;
+		}
+		else{
+			runtime+=rr;
+		}
 		output[index].pause=runtime;
 		if (running.required_time==0){
 			output[index].end=runtime;
 		}
-		total_burst-=rr;
+		if(run_count){
+			total_burst-=run_count*rr;
+			run_count=0;	
+		}
+		else{
+			total_burst-=rr;
+		}
 		check_creation();	
 	}
 	
