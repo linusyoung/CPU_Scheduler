@@ -329,6 +329,10 @@ void Scheduler::run_process(){
            	 	index = id[1]-'0';
 				serve=false;
 			}
+			if (output[index].first_run){
+				output[index].start=running.creation_time;
+			}
+
             set_output(index);
             running.required_time-=rr;
             if (running.required_time>0){
@@ -362,13 +366,13 @@ void Scheduler::run_process(){
 		bool new_process=check_creation();	
 		/* preemptive low priority queue
 			while current process that is not finished is in low priority 
-			queue, if there is new process coming, storing current process 
-			status at the front of the queue. if the new process dose not 
-			interrupt current one, the current one will continue.
+			queue, if there is new process coming, the current one will 
+			be push into the end of current queue.
 		*/
 		if (running.required_time>0){
 			if (new_process && current_q2){
-				lpq_q2.front()=running;
+				lpq_q2.pop();
+				lpq_q2.push(running);
 				serve=true;	
 			}
 		}
