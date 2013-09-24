@@ -69,6 +69,7 @@ private:
 		@param	int index - index of process
 	*/	
 	void set_output(int index){
+		output[index].running+=rr;
 		if (output[index].first_run){
 			output[index].ready=runtime;
 			output[index].first_run=!output[index].first_run;
@@ -120,35 +121,47 @@ private:
 		for high priority process, push into the running queue, which is sub_hpq, re-sort this queue by current priority of processes
 		for low priority process, push into the low priority queue, which is lpq_q2.
 	*/
-	void check_creation(){
+	bool check_creation(){
 		queue <Process_prop> temp_h,temp_l;
 		vector <Process_prop> priority;
-		while(ready_h.size()!=0){
-			if (ready_h.front().creation_time==runtime){
-				priority.push_back(ready_h.front());
-	
+		bool nph=false,npl=false;
+		if (ready_h.size() || ready_l.size()){
+			while(ready_h.size()!=0){
+				if (ready_h.front().creation_time==runtime){
+					priority.push_back(ready_h.front());	
+					nph=true;	
+				}
+				else{
+					temp_h.push(ready_h.front());
+				}
+				ready_h.pop();
 			}
-			else{
-				temp_h.push(ready_h.front());
+			while(ready_l.size()!=0){
+				if (ready_l.front().creation_time==runtime){
+					lpq_q2.push(ready_l.front());
+					npl=true;
+				}
+				else{
+					temp_l.push(ready_l.front());
+				}
+				ready_l.pop();
 			}
-			ready_h.pop();
+			if (nph){
+				while(sub_hpq.size()!=0){
+				priority.push_back(sub_hpq.front());
+				sub_hpq.pop();	
+				}	
+				sub_hpq=buildSub(priority);
+			}
+			ready_h=temp_h;
+			ready_l=temp_l;
 		}
-		while(ready_l.size()!=0){
-			if (ready_l.front().creation_time==runtime){
-				lpq_q2.push(ready_l.front());
-			}
-			else{
-				temp_l.push(ready_l.front());
-			}
-			ready_l.pop();
+		if(nph || npl){
+			return true;
 		}
-		while(sub_hpq.size()!=0){
-			priority.push_back(sub_hpq.front());
-			sub_hpq.pop();	
-		}	
-		sub_hpq=buildSub(priority);
-		ready_h=temp_h;
-		ready_l=temp_l;
+		else{
+			return false;	
+		}
 	}
 public:
 	Scheduler(int rr);
@@ -279,20 +292,20 @@ void Scheduler::print_result(){
 void Scheduler::run_process(){
 	Process_prop running;
 	int index;
-	int run_count=0;
+	bool serve=true,current_q2=false;
 	string id;
 	while(total_burst>0){
 		if(sub_hpq.size()!=0){
+			current_q2=false;
 			running= sub_hpq.front();
+			sub_hpq.pop();
 			id = running.name;
 			index = id[1]-'0';
 			if (output[index].first_run){
 				output[index].start=running.creation_time;
 			}
 			set_output(index);
-			sub_hpq.pop();
 			running.required_time-=rr;
-			output[index].running+=rr;
 			if (running.required_time>0){
 				if (output[index].running % 20!=0){
 					sub_hpq.push(running);
@@ -309,50 +322,56 @@ void Scheduler::run_process(){
 			}
 		}
 		else{
-			running=lpq_q2.front();
-			bool empty=false;
-			run_count=0;
-			id = running.name;
-			index = id[1]-'0';
-			set_output(index);
-			lpq_q2.pop();
-			while(running.required_time>0 && !empty){
-				running.required_time-=rr;
-				running.age_count++;
-				run_count++;
-				if (running.age_count==10){
-					running.age++;
-				}		
-				if (running.age==3){
-					running.priority++;
-					running.age=0;
-				}
-				if (running.priority>=PRIORITY){
-					sub_hpq.push(running);
-					empty=true;
-				}
+			current_q2=true;
+			if (serve){
+	        	running=lpq_q2.front();
+            	id = running.name;
+           	 	index = id[1]-'0';
+				serve=false;
 			}
-			output[index].running+=run_count*rr;
+            set_output(index);
+            running.required_time-=rr;
+            if (running.required_time>0){
+                running.age_count++;
+            	if (running.age_count==10){
+	    			running.age++;
+            	}               
+            	if (running.age==3){
+            		running.priority++;
+                	running.age=0;
+            	}
+            	if (running.priority>=PRIORITY){
+	        		sub_hpq.push(running);
+					serve=true;
+            	}
+            }
+			else{
+				serve=true;
+            	lpq_q2.pop();
+			}
 		}
 		//runtime increases rr time and total burst time decreases
-		if(run_count){
-			runtime+=run_count*rr;
-		}
-		else{
-			runtime+=rr;
-		}
-		output[index].pause=runtime;
+		runtime+=rr;
 		if (running.required_time==0){
 			output[index].end=runtime;
 		}
-		if(run_count){
-			total_burst-=run_count*rr;
-			run_count=0;	
-		}
 		else{
-			total_burst-=rr;
+			output[index].pause=runtime;
 		}
-		check_creation();	
+		total_burst-=rr;
+		bool new_process=check_creation();	
+		/* preemptive low priority queue
+			while current process that is not finished is in low priority 
+			queue, if there is new process coming, storing current process 
+			status at the front of the queue. if the new process dose not 
+			interrupt current one, the current one will continue.
+		*/
+		if (running.required_time>0){
+			if (new_process && current_q2){
+				lpq_q2.front()=running;
+				serve=true;	
+			}
+		}
 	}
 	
 }
