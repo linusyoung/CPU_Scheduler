@@ -19,37 +19,10 @@ private:
 	int rr;
 	vector <Process_result> output;
 	queue <Process_prop> hpq_q1,lpq_q2;
+	queue <Process_prop> hpq_p4,hpq_p5,hpq_p6;
 	queue <Process_prop> ready_h,ready_l;
-	queue <Process_prop> sub_hpq;
-	/* 	
-		buildSub
-		generate a running high priority queue which is ordered by priority
-		if the priority is the same then process as the arrival order
-		@precon	priority number is greater than four
-		@param	vector <Process_prop> &subq - a vector contains high priority process
-		@return queue <Process_prop> temp - a sorted queue 
-	*/	
-	queue <Process_prop> buildSub(vector <Process_prop> &subq){
-		int size = subq.size();
-		int highest,push=0;
-		queue <Process_prop> temp;
-		for (int i=0; i<size; i++){
-			highest = subq[i].priority;
-			push=i;
-			for (int j=i+1; j<size; j++){
-				if (subq[j].priority>highest){
-					highest = subq[j].priority;
-					push=j;
-				}
-			}
-			if (push!=i){
-				swap(i,push,subq);
-			}
-			temp.push(subq[i]);
-		}
-		
-		return temp;
-	}
+	vector <Process_prop> sub_hpq;
+
 	/*
 		swap
 		swap the value in the vector
@@ -80,6 +53,33 @@ private:
 		}
 
 	}
+/*
+	buildSub
+	scheduler will push the higher process into differet sub queue 
+	according to the priority of that process.
+	after that, hpq_q1 will be empty.
+*/
+
+	void buildSub(){
+		int priority;
+		Process_prop current_process;
+		while (hpq_q1.size()>0){
+			current_process = hpq_q1.front();
+			priority=current_process.priority;
+			switch (priority){
+				case 4:
+					hpq_p4.push(current_process);
+					break;
+				case 5:
+					hpq_p5.push(current_process);
+					break;
+				case 6:
+					hpq_p6.push(current_process);
+					break;
+			}
+			hpq_q1.pop();
+		}
+	}
 	/*
 		sort_ready
 		CPU will get new processes after running, the new process is appended onto ready queue at first
@@ -87,6 +87,7 @@ private:
 		@param	queue <Process_prop> ready - a ready queue 
 		@return queue <Process_prop> sorted - a queue sorted by creation time
 	*/
+	
 	queue <Process_prop> sort_ready(queue <Process_prop> ready){
 		queue <Process_prop> sorted;
 		vector <Process_prop> temp;
@@ -112,9 +113,8 @@ private:
 		}
 		
 		return sorted;
-
-		
 	}
+
 	/*
 		check_creation
 		when creation time equals current cpu run time, then push this process
@@ -128,7 +128,18 @@ private:
 		if (ready_h.size() || ready_l.size()){
 			while(ready_h.size()!=0){
 				if (ready_h.front().creation_time==runtime){
-					priority.push_back(ready_h.front());	
+					int pp = ready_h.front().priority;
+					switch (pp){
+					case 6:
+						hpq_p6.push(ready_h.front());
+						break;
+					case 5:
+						hpq_p5.push(ready_h.front());
+						break;
+					case 4:
+						hpq_p4.push(ready_h.front());
+						break;
+					}
 					nph=true;	
 				}
 				else{
@@ -146,13 +157,7 @@ private:
 				}
 				ready_l.pop();
 			}
-			if (nph){
-				while(sub_hpq.size()!=0){
-				priority.push_back(sub_hpq.front());
-				sub_hpq.pop();	
-				}	
-				sub_hpq=buildSub(priority);
-			}
+			
 			ready_h=temp_h;
 			ready_l=temp_l;
 		}
@@ -195,9 +200,8 @@ void Scheduler::initial_scheduler(Process_prop *p,int number){
 	vector <Process_prop> priority;
 	for (int i=0; i<number; i++){
 		if(p[i].priority>=PRIORITY){
-			hpq_q1.push(p[i]);
 			if (p[i].creation_time==0){
-				priority.push_back(p[i]);
+				hpq_q1.push(p[i]);
 			}
 			else{
 				ready_h.push(p[i]);
@@ -212,10 +216,7 @@ void Scheduler::initial_scheduler(Process_prop *p,int number){
 			}	
 		}
 	}
-	sub_hpq = buildSub(priority);
-	if (ready_h.size()){	
-		ready_h = sort_ready(ready_h);
-	}
+	buildSub();
 	if (ready_l.size()){
 		ready_l = sort_ready(ready_l);
 	}
@@ -277,13 +278,15 @@ void Scheduler::print_result(){
 	cout << "Averagewaitingtime = " <<  avg_w << endl;
 }
 
+
 /*
 	run_process
 	this is the main function for scheduling the process
-	the scheduler will run the process in the high priority running queue sub_hpq if this queue is not empty.
+	the scheduler will run the process by the order of priority 
+	if the higher queue is not empty, then running this queue. 
 	after 2 runs, the priority of this process will be decreased by 1.
 	after each run, the process will be pushed into the end of current queue or low priority queue according to the priority
-	the process in the low priority queue has a age mechanism that will be promoted by 1 after running for a certain unit time(e.g. 300)
+	the process in the low priority queue has a age mechanism that will be promoted by 1 after running for a certain unit time(e.g 300)
 	every process will be run a quantum unit time, which is 10 units in this case.
 	scheduler will check if any new process has been created after executing one quantum unit time.
 	
@@ -295,10 +298,9 @@ void Scheduler::run_process(){
 	bool serve=true,current_q2=false;
 	string id;
 	while(total_burst>0){
-		if(sub_hpq.size()!=0){
-			current_q2=false;
-			running= sub_hpq.front();
-			sub_hpq.pop();
+		if(hpq_p6.size()!=0){
+			running= hpq_p6.front();
+			hpq_p6.pop();
 			id = running.name;
 			index = id[1]-'0';
 			if (output[index].first_run){
@@ -308,7 +310,7 @@ void Scheduler::run_process(){
 			running.required_time-=rr;
 			if (running.required_time>0){
 				if (output[index].running % 20!=0){
-					sub_hpq.push(running);
+					hpq_p6.push(running);
 				}
 				else{
 					running.priority--;
@@ -316,7 +318,56 @@ void Scheduler::run_process(){
 						lpq_q2.push(running);
 					}
 					else{
-						sub_hpq.push(running);
+						hpq_p5.push(running);
+					}
+				}
+			}
+		}
+		else if (hpq_p5.size()!=0){
+			running= hpq_p5.front();
+			hpq_p5.pop();
+			id = running.name;
+			index = id[1]-'0';
+			if (output[index].first_run){
+				output[index].start=running.creation_time;
+			}
+			set_output(index);
+			running.required_time-=rr;
+			if (running.required_time>0){
+				if (output[index].running % 20!=0){
+					hpq_p5.push(running);
+				}
+				else{
+					running.priority--;
+					if (running.priority<PRIORITY){
+						lpq_q2.push(running);
+					}
+					else{
+						hpq_p4.push(running);
+					}
+				}
+			}
+
+		} 
+		else if(hpq_p4.size()!=0){
+			current_q2=false;
+			running= hpq_p4.front();
+			hpq_p4.pop();
+			id = running.name;
+			index = id[1]-'0';
+			if (output[index].first_run){
+				output[index].start=running.creation_time;
+			}
+			set_output(index);
+			running.required_time-=rr;
+			if (running.required_time>0){
+				if (output[index].running % 20!=0){
+					hpq_p4.push(running);
+				}
+				else{
+					running.priority--;
+					if (running.priority<PRIORITY){
+						lpq_q2.push(running);
 					}
 				}
 			}
@@ -345,7 +396,7 @@ void Scheduler::run_process(){
                 	running.age=0;
             	}
             	if (running.priority>=PRIORITY){
-	        		sub_hpq.push(running);
+	        		hpq_p4.push(running);
 					serve=true;
             	}
             }
@@ -377,6 +428,5 @@ void Scheduler::run_process(){
 			}
 		}
 	}
-	
 }
 
